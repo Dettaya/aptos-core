@@ -38,12 +38,14 @@ use std::{
     sync::Arc,
 };
 
+mod access_specifier_loader;
 mod function;
 mod modules;
 mod type_loader;
 
 pub(crate) use function::{Function, FunctionHandle, FunctionInstantiation, LoadedFunction, Scope};
 pub(crate) use modules::{Module, ModuleCache};
+use move_vm_types::loaded_data::runtime_access_specifier::AccessSpecifier;
 use type_loader::intern_type;
 
 type ScriptHash = [u8; 32];
@@ -1648,6 +1650,7 @@ impl Script {
             return_types: return_tys.clone(),
             local_types: local_tys,
             parameter_types: parameter_tys.clone(),
+            access_specifier: AccessSpecifier::Any, // TODO: access specifiers for scripts
         });
 
         let mut single_signature_token_map = BTreeMap::new();

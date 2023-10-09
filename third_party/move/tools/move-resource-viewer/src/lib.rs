@@ -90,6 +90,12 @@ impl<'a, T: MoveResolver + ?Sized> MoveValueAnnotator<'a, T> {
         }
     }
 
+    pub fn new_with_max_bytecode_version(view: &'a T, max_bytecode_version: u32) -> Self {
+        Self {
+            cache: Resolver::new_with_max_bytecode_version(view, max_bytecode_version),
+        }
+    }
+
     // TODO
     pub fn get_resource_bytes(&self, addr: &AccountAddress, tag: &StructTag) -> Option<Vec<u8>> {
         self.cache

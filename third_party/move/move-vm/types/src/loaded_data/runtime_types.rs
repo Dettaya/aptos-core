@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use derivative::Derivative;
+use itertools::Itertools;
 use move_binary_format::{
     errors::{PartialVMError, PartialVMResult},
     file_format::{
@@ -14,7 +15,7 @@ use move_core_types::{
     vm_status::StatusCode,
 };
 use smallbitvec::SmallBitVec;
-use std::{cmp::max, collections::BTreeMap, fmt::Debug, sync::Arc};
+use std::{cmp::max, collections::BTreeMap, fmt, fmt::Debug, sync::Arc};
 
 pub const TYPE_DEPTH_MAX: usize = 256;
 
@@ -452,6 +453,49 @@ impl Type {
                     type_argument_abilities,
                 )
             },
+        }
+    }
+}
+
+impl fmt::Display for StructIdentifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}::{}",
+            self.module.short_str_lossless(),
+            self.name.as_str()
+        )
+    }
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Type::*;
+        match self {
+            Bool => f.write_str("bool"),
+            U8 => f.write_str("u8"),
+            U16 => f.write_str("u16"),
+            U32 => f.write_str("u32"),
+            U64 => f.write_str("u64"),
+            U128 => f.write_str("u128"),
+            U256 => f.write_str("u256"),
+            Address => f.write_str("address"),
+            Signer => f.write_str("signer"),
+            Vector(et) => write!(f, "vector<{}>", et),
+            Struct { name, ability: _ } => f.write_str(&name.to_string()),
+            StructInstantiation {
+                name,
+                ty_args,
+                ability: _,
+            } => write!(
+                f,
+                "{}<{}>",
+                name,
+                ty_args.iter().map(|t| t.to_string()).join(",")
+            ),
+            Reference(t) => write!(f, "&{}", t),
+            MutableReference(t) => write!(f, "&mut {}", t),
+            TyParam(no) => write!(f, "_{}", no),
         }
     }
 }

@@ -27,5 +27,6 @@ pub mod config;
 #[cfg(any(debug_assertions, feature = "debugging"))]
 mod debug;
 
+mod access_control;
 #[cfg(test)]
 mod unit_tests;

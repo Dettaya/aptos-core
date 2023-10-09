@@ -9,7 +9,8 @@ use crate::{
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use move_binary_format::{
-    compatibility::Compatibility, errors::VMResult, file_format::CompiledScript, CompiledModule,
+    compatibility::Compatibility, errors::VMResult, file_format::CompiledScript,
+    file_format_common, file_format_common::VERSION_MAX, CompiledModule,
 };
 use move_command_line_common::{
     address::ParsedAddress, env::read_bool_env_var, files::verify_and_create_named_address_mapping,
@@ -68,7 +69,8 @@ pub fn view_resource_in_move_storage(
     match storage.get_resource(&address, &tag).unwrap() {
         None => Ok("[No Resource Exists]".to_owned()),
         Some(data) => {
-            let annotated = MoveValueAnnotator::new(storage).view_resource(&tag, &data)?;
+            let annotated = MoveValueAnnotator::new_with_max_bytecode_version(storage, VERSION_MAX)
+                .view_resource(&tag, &data)?;
             Ok(format!("{}", annotated))
         },
     }
@@ -165,8 +167,12 @@ impl<'a> MoveTestAdapter<'a> for SimpleVMTestAdapter<'a> {
                 |session, gas_status| {
                     for module in &*MOVE_STDLIB_COMPILED {
                         let mut module_bytes = vec![];
-                        module.serialize(&mut module_bytes).unwrap();
-
+                        module
+                            .serialize_for_version(
+                                Some(file_format_common::VERSION_MAX),
+                                &mut module_bytes,
+                            )
+                            .unwrap();
                         let id = module.self_id();
                         let sender = *id.address();
                         session
@@ -203,7 +209,7 @@ impl<'a> MoveTestAdapter<'a> for SimpleVMTestAdapter<'a> {
         extra_args: Self::ExtraPublishArgs,
     ) -> Result<(Option<String>, CompiledModule)> {
         let mut module_bytes = vec![];
-        module.serialize(&mut module_bytes)?;
+        module.serialize_for_version(Some(file_format_common::VERSION_MAX), &mut module_bytes)?;
 
         let id = module.self_id();
         let sender = *id.address();
@@ -250,7 +256,7 @@ impl<'a> MoveTestAdapter<'a> for SimpleVMTestAdapter<'a> {
             .collect();
 
         let mut script_bytes = vec![];
-        script.serialize(&mut script_bytes)?;
+        script.serialize_for_version(Some(file_format_common::VERSION_MAX), &mut script_bytes)?;
 
         let args = txn_args
             .iter()
