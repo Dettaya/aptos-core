@@ -12,7 +12,9 @@ This module provides the foundation for typesafe Coins.
 -  [Resource `SupplyConfig`](#0x1_coin_SupplyConfig)
 -  [Resource `CoinInfo`](#0x1_coin_CoinInfo)
 -  [Struct `DepositEvent`](#0x1_coin_DepositEvent)
+-  [Struct `Deposit`](#0x1_coin_Deposit)
 -  [Struct `WithdrawEvent`](#0x1_coin_WithdrawEvent)
+-  [Struct `Withdraw`](#0x1_coin_Withdraw)
 -  [Struct `MintCapability`](#0x1_coin_MintCapability)
 -  [Struct `FreezeCapability`](#0x1_coin_FreezeCapability)
 -  [Struct `BurnCapability`](#0x1_coin_BurnCapability)
@@ -322,6 +324,46 @@ Event emitted when some amount of a coin is deposited into an account.
 
 </details>
 
+<a name="0x1_coin_Deposit"></a>
+
+## Struct `Deposit`
+
+
+
+<pre><code>#[<a href="event.md#0x1_event">event</a>]
+<b>struct</b> <a href="coin.md#0x1_coin_Deposit">Deposit</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code><a href="account.md#0x1_account">account</a>: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>coin_type: <a href="../../aptos-stdlib/doc/type_info.md#0x1_type_info_TypeInfo">type_info::TypeInfo</a></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>amount: u64</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
 <a name="0x1_coin_WithdrawEvent"></a>
 
 ## Struct `WithdrawEvent`
@@ -339,6 +381,46 @@ Event emitted when some amount of a coin is withdrawn from an account.
 
 
 <dl>
+<dt>
+<code>amount: u64</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a name="0x1_coin_Withdraw"></a>
+
+## Struct `Withdraw`
+
+
+
+<pre><code>#[<a href="event.md#0x1_event">event</a>]
+<b>struct</b> <a href="coin.md#0x1_coin_Withdraw">Withdraw</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code><a href="account.md#0x1_account">account</a>: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>coin_type: <a href="../../aptos-stdlib/doc/type_info.md#0x1_type_info_TypeInfo">type_info::TypeInfo</a></code>
+</dt>
+<dd>
+
+</dd>
 <dt>
 <code>amount: u64</code>
 </dt>
@@ -826,7 +908,10 @@ Merges <code><a href="coin.md#0x1_coin">coin</a></code> into aggregatable coin (
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="coin.md#0x1_coin_merge_aggregatable_coin">merge_aggregatable_coin</a>&lt;CoinType&gt;(dst_coin: &<b>mut</b> <a href="coin.md#0x1_coin_AggregatableCoin">AggregatableCoin</a>&lt;CoinType&gt;, <a href="coin.md#0x1_coin">coin</a>: <a href="coin.md#0x1_coin_Coin">Coin</a>&lt;CoinType&gt;) {
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="coin.md#0x1_coin_merge_aggregatable_coin">merge_aggregatable_coin</a>&lt;CoinType&gt;(
+    dst_coin: &<b>mut</b> <a href="coin.md#0x1_coin_AggregatableCoin">AggregatableCoin</a>&lt;CoinType&gt;,
+    <a href="coin.md#0x1_coin">coin</a>: <a href="coin.md#0x1_coin_Coin">Coin</a>&lt;CoinType&gt;
+) {
     <b>spec</b> {
         <b>update</b> <a href="coin.md#0x1_coin_supply">supply</a>&lt;CoinType&gt; = <a href="coin.md#0x1_coin_supply">supply</a>&lt;CoinType&gt; - <a href="coin.md#0x1_coin">coin</a>.value;
     };
@@ -979,8 +1064,8 @@ Returns <code><b>true</b></code> is account_addr has frozen the CoinStore or if 
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="coin.md#0x1_coin_is_coin_store_frozen">is_coin_store_frozen</a>&lt;CoinType&gt;(account_addr: <b>address</b>): bool <b>acquires</b> <a href="coin.md#0x1_coin_CoinStore">CoinStore</a> {
-    <b>if</b>(!<a href="coin.md#0x1_coin_is_account_registered">is_account_registered</a>&lt;CoinType&gt;(account_addr)) {
-      <b>return</b> <b>true</b>
+    <b>if</b> (!<a href="coin.md#0x1_coin_is_account_registered">is_account_registered</a>&lt;CoinType&gt;(account_addr)) {
+        <b>return</b> <b>true</b>
     };
 
     <b>let</b> coin_store = <b>borrow_global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">CoinStore</a>&lt;CoinType&gt;&gt;(account_addr);
@@ -1238,11 +1323,11 @@ Deposit the coin balance into the recipient's account and emit an event.
         !coin_store.frozen,
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_permission_denied">error::permission_denied</a>(<a href="coin.md#0x1_coin_EFROZEN">EFROZEN</a>),
     );
-
     <a href="event.md#0x1_event_emit_event">event::emit_event</a>&lt;<a href="coin.md#0x1_coin_DepositEvent">DepositEvent</a>&gt;(
         &<b>mut</b> coin_store.deposit_events,
         <a href="coin.md#0x1_coin_DepositEvent">DepositEvent</a> { amount: <a href="coin.md#0x1_coin">coin</a>.value },
     );
+    <a href="event.md#0x1_event_emit">event::emit</a>(<a href="coin.md#0x1_coin_Deposit">Deposit</a> { <a href="account.md#0x1_account">account</a>: account_addr, coin_type: type_of&lt;CoinType&gt;(), amount: <a href="coin.md#0x1_coin">coin</a>.value });
 
     <a href="coin.md#0x1_coin_merge">merge</a>(&<b>mut</b> coin_store.<a href="coin.md#0x1_coin">coin</a>, <a href="coin.md#0x1_coin">coin</a>);
 }
@@ -1597,7 +1682,11 @@ Same as <code>initialize</code> but supply can be initialized to parallelizable 
         name,
         symbol,
         decimals,
-        <a href="coin.md#0x1_coin_supply">supply</a>: <b>if</b> (monitor_supply) { <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(<a href="optional_aggregator.md#0x1_optional_aggregator_new">optional_aggregator::new</a>(<a href="coin.md#0x1_coin_MAX_U128">MAX_U128</a>, parallelizable)) } <b>else</b> { <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_none">option::none</a>() },
+        <a href="coin.md#0x1_coin_supply">supply</a>: <b>if</b> (monitor_supply) {
+            <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(
+                <a href="optional_aggregator.md#0x1_optional_aggregator_new">optional_aggregator::new</a>(<a href="coin.md#0x1_coin_MAX_U128">MAX_U128</a>, parallelizable)
+            )
+        } <b>else</b> { <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_none">option::none</a>() },
     };
     <b>move_to</b>(<a href="account.md#0x1_account">account</a>, coin_info);
 
@@ -1679,7 +1768,9 @@ Returns minted <code><a href="coin.md#0x1_coin_Coin">Coin</a></code>.
         <b>spec</b> {
             <b>use</b> aptos_framework::optional_aggregator;
             <b>use</b> aptos_framework::aggregator;
-            <b>assume</b> <a href="optional_aggregator.md#0x1_optional_aggregator_is_parallelizable">optional_aggregator::is_parallelizable</a>(<a href="coin.md#0x1_coin_supply">supply</a>) ==&gt; (<a href="aggregator.md#0x1_aggregator_spec_aggregator_get_val">aggregator::spec_aggregator_get_val</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(<a href="coin.md#0x1_coin_supply">supply</a>.<a href="aggregator.md#0x1_aggregator">aggregator</a>))
+            <b>assume</b> <a href="optional_aggregator.md#0x1_optional_aggregator_is_parallelizable">optional_aggregator::is_parallelizable</a>(<a href="coin.md#0x1_coin_supply">supply</a>) ==&gt; (<a href="aggregator.md#0x1_aggregator_spec_aggregator_get_val">aggregator::spec_aggregator_get_val</a>(
+                <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(<a href="coin.md#0x1_coin_supply">supply</a>.<a href="aggregator.md#0x1_aggregator">aggregator</a>)
+            )
                 + amount &lt;= <a href="aggregator.md#0x1_aggregator_spec_get_limit">aggregator::spec_get_limit</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(<a href="coin.md#0x1_coin_supply">supply</a>.<a href="aggregator.md#0x1_aggregator">aggregator</a>)));
             <b>assume</b> !<a href="optional_aggregator.md#0x1_optional_aggregator_is_parallelizable">optional_aggregator::is_parallelizable</a>(<a href="coin.md#0x1_coin_supply">supply</a>) ==&gt;
                 (<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(<a href="coin.md#0x1_coin_supply">supply</a>.integer).value + amount &lt;= <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(<a href="coin.md#0x1_coin_supply">supply</a>.integer).limit);
@@ -1825,6 +1916,7 @@ Withdraw specified <code>amount</code> of coin <code>CoinType</code> from the si
         &<b>mut</b> coin_store.withdraw_events,
         <a href="coin.md#0x1_coin_WithdrawEvent">WithdrawEvent</a> { amount },
     );
+    <a href="event.md#0x1_event_emit">event::emit</a>(<a href="coin.md#0x1_coin_Withdraw">Withdraw</a> { <a href="account.md#0x1_account">account</a>: account_addr, coin_type: type_of&lt;CoinType&gt;(), amount }, );
 
     <a href="coin.md#0x1_coin_extract">extract</a>(&<b>mut</b> coin_store.<a href="coin.md#0x1_coin">coin</a>, amount)
 }
@@ -2652,27 +2744,6 @@ The creator of <code>CoinType</code> must be <code>@aptos_framework</code>.
     name: name.bytes,
     symbol: symbol.bytes
 };
-</code></pre>
-
-
-Make sure <code>name</code> and <code>symbol</code> are legal length.
-Only the creator of <code>CoinType</code> can initialize.
-
-
-<a name="0x1_coin_InitializeInternalSchema"></a>
-
-
-<pre><code><b>schema</b> <a href="coin.md#0x1_coin_InitializeInternalSchema">InitializeInternalSchema</a>&lt;CoinType&gt; {
-    <a href="account.md#0x1_account">account</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>;
-    name: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;;
-    symbol: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;;
-    <b>let</b> account_addr = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(<a href="account.md#0x1_account">account</a>);
-    <b>let</b> coin_address = <a href="../../aptos-stdlib/doc/type_info.md#0x1_type_info_type_of">type_info::type_of</a>&lt;CoinType&gt;().account_address;
-    <b>aborts_if</b> coin_address != account_addr;
-    <b>aborts_if</b> <b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinInfo">CoinInfo</a>&lt;CoinType&gt;&gt;(account_addr);
-    <b>aborts_if</b> len(name) &gt; <a href="coin.md#0x1_coin_MAX_COIN_NAME_LENGTH">MAX_COIN_NAME_LENGTH</a>;
-    <b>aborts_if</b> len(symbol) &gt; <a href="coin.md#0x1_coin_MAX_COIN_SYMBOL_LENGTH">MAX_COIN_SYMBOL_LENGTH</a>;
-}
 </code></pre>
 
 

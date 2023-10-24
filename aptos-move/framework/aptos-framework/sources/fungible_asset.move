@@ -146,13 +146,31 @@ module aptos_framework::fungible_asset {
         amount: u64,
     }
 
+    #[event]
+    struct Deposit has drop, store {
+        store: address,
+        amount: u64,
+    }
+
     /// Emitted when fungible assets are withdrawn from a store.
     struct WithdrawEvent has drop, store {
         amount: u64,
     }
 
+    #[event]
+    struct Withdraw has drop, store {
+        store: address,
+        amount: u64,
+    }
+
     /// Emitted when a store's frozen status is updated.
     struct FrozenEvent has drop, store {
+        frozen: bool,
+    }
+
+    #[event]
+    struct Frozen has drop, store {
+        store: address,
         frozen: bool,
     }
 
@@ -444,6 +462,7 @@ module aptos_framework::fungible_asset {
         borrow_global_mut<FungibleStore>(store_addr).frozen = frozen;
 
         let events = borrow_global_mut<FungibleAssetEvents>(store_addr);
+        event::emit(Frozen { store: store_addr, frozen });
         event::emit_event(&mut events.frozen_events, FrozenEvent { frozen });
     }
 
@@ -550,6 +569,7 @@ module aptos_framework::fungible_asset {
         store.balance = store.balance + amount;
 
         let events = borrow_global_mut<FungibleAssetEvents>(store_addr);
+        event::emit<Deposit>(Deposit { store: store_addr, amount });
         event::emit_event(&mut events.deposit_events, DepositEvent { amount });
     }
 
@@ -565,6 +585,7 @@ module aptos_framework::fungible_asset {
 
         let events = borrow_global_mut<FungibleAssetEvents>(store_addr);
         let metadata = store.metadata;
+        event::emit<Withdraw>(Withdraw { store: store_addr, amount });
         event::emit_event(&mut events.withdraw_events, WithdrawEvent { amount });
 
         FungibleAsset { metadata, amount }
@@ -861,7 +882,10 @@ module aptos_framework::fungible_asset {
     }
 
     #[test(fx = @aptos_framework, creator = @0xcafe)]
-    fun test_fungible_asset_upgrade(fx: &signer, creator: &signer) acquires Supply, ConcurrentSupply, FungibleAssetEvents, FungibleStore {
+    fun test_fungible_asset_upgrade(
+        fx: &signer,
+        creator: &signer
+    ) acquires Supply, ConcurrentSupply, FungibleAssetEvents, FungibleStore {
         let feature = features::get_concurrent_assets_feature();
         features::change_feature_flags(fx, vector[], vector[feature]);
 
