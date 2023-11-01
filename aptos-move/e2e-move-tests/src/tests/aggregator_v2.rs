@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    aggregator_v2::{initialize, AggV2TestHarness, AggregatorLocation, ElementType, UseType},
-    assert_abort, assert_success,
+    aggregator_v2::{
+        initialize, initialize_enabled_disabled_comparison, AggV2TestHarness, AggregatorLocation,
+        ElementType, UseType,
+    },
     tests::common,
     BlockSplit, SUCCESS,
 };
@@ -20,63 +22,67 @@ const DEFAULT_EXECUTOR_MODE: ExecutorMode = ExecutorMode::SequentialOnly;
 
 fn setup(
     executor_mode: ExecutorMode,
-    aggregator_execution_enabled: bool,
+    aggregator_execution_mode: AggregatorMode,
     txns: usize,
 ) -> AggV2TestHarness {
-    initialize(
-        common::test_dir_path("aggregator_v2.data/pack"),
-        executor_mode,
-        aggregator_execution_enabled,
-        txns,
-    )
+    let path = common::test_dir_path("aggregator_v2.data/pack");
+    match aggregator_execution_mode {
+        AggregatorMode::EnabledOnly => initialize(path, executor_mode, true, txns),
+        AggregatorMode::DisabledOnly => initialize(path, executor_mode, false, txns),
+        AggregatorMode::BothComparison => {
+            initialize_enabled_disabled_comparison(path, executor_mode, txns)
+        },
+    }
 }
 
 #[cfg(test)]
 mod test_cases {
     use super::*;
-    use test_case::test_case;
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_copy_snapshot(execution_enabled: bool) {
-        let mut h = setup(DEFAULT_EXECUTOR_MODE, execution_enabled, 1);
+    #[test]
+    fn test_copy_snapshot() {
+        let mut h = setup(DEFAULT_EXECUTOR_MODE, AggregatorMode::BothComparison, 1);
         let txn = h.verify_copy_snapshot();
-        assert_abort!(h.harness.run(txn), EAGGREGATOR_FUNCTION_NOT_YET_SUPPORTED);
+        h.run_block_in_parts_and_check(BlockSplit::Whole, vec![(
+            EAGGREGATOR_FUNCTION_NOT_YET_SUPPORTED,
+            txn,
+        )]);
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_copy_string_snapshot(execution_enabled: bool) {
-        let mut h = setup(DEFAULT_EXECUTOR_MODE, execution_enabled, 1);
+    #[test]
+    fn test_copy_string_snapshot() {
+        let mut h = setup(DEFAULT_EXECUTOR_MODE, AggregatorMode::BothComparison, 1);
         let txn = h.verify_copy_string_snapshot();
-        assert_abort!(h.harness.run(txn), EAGGREGATOR_FUNCTION_NOT_YET_SUPPORTED);
+        h.run_block_in_parts_and_check(BlockSplit::Whole, vec![(
+            EAGGREGATOR_FUNCTION_NOT_YET_SUPPORTED,
+            txn,
+        )]);
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_snapshot_concat(execution_enabled: bool) {
-        let mut h = setup(DEFAULT_EXECUTOR_MODE, execution_enabled, 1);
+    #[test]
+    fn test_snapshot_concat() {
+        let mut h = setup(DEFAULT_EXECUTOR_MODE, AggregatorMode::BothComparison, 1);
         let txn = h.verify_string_concat();
-        assert_success!(h.harness.run(txn));
+        h.run_block_in_parts_and_check(BlockSplit::Whole, vec![(0, txn)]);
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_string_snapshot_concat(execution_enabled: bool) {
-        let mut h = setup(DEFAULT_EXECUTOR_MODE, execution_enabled, 1);
+    #[test]
+    fn test_string_snapshot_concat() {
+        let mut h = setup(DEFAULT_EXECUTOR_MODE, AggregatorMode::BothComparison, 1);
         let txn = h.verify_string_snapshot_concat();
-        assert_abort!(h.harness.run(txn), EUNSUPPORTED_AGGREGATOR_SNAPSHOT_TYPE);
+        h.run_block_in_parts_and_check(BlockSplit::Whole, vec![(
+            EUNSUPPORTED_AGGREGATOR_SNAPSHOT_TYPE,
+            txn,
+        )]);
     }
 
-    // This tests uses multuple blocks, so requires exchange to be done to work.
-    // #[test_case(true)]
-    #[test_case(false)]
-    fn test_aggregators_e2e(execution_enabled: bool) {
-        println!("Testing test_aggregators_e2e {:?}", execution_enabled);
+    #[test]
+    fn test_aggregators_e2e() {
+        println!("Testing test_aggregators_e2e");
         let element_type = ElementType::U64;
         let use_type = UseType::UseTableType;
 
-        let mut h = setup(DEFAULT_EXECUTOR_MODE, execution_enabled, 100);
+        let mut h = setup(DEFAULT_EXECUTOR_MODE, AggregatorMode::BothComparison, 100);
 
         let init_txn = h.init(None, use_type, element_type, true);
         h.run_block_in_parts_and_check(BlockSplit::Whole, vec![(SUCCESS, init_txn)]);
@@ -168,38 +174,44 @@ fn arb_block_split(len: usize) -> BoxedStrategy<BlockSplit> {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum AggregatorMode {
+    EnabledOnly,
+    DisabledOnly,
+    BothComparison,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct TestEnvConfig {
     pub executor_mode: ExecutorMode,
-    pub aggregator_execution_enabled: bool,
+    pub aggregator_execution_mode: AggregatorMode,
     pub block_split: BlockSplit,
 }
 
 #[allow(clippy::arc_with_non_send_sync)] // I think this is noise, don't see an issue, and tests run fine
 fn arb_test_env(num_txns: usize) -> BoxedStrategy<TestEnvConfig> {
     prop_oneof![
-        // For execution disabled, use only whole blocks and txn-per-block for block splits, as it block split shouldn't matter there.
-        Just(TestEnvConfig {
-            executor_mode: ExecutorMode::BothComparison,
-            aggregator_execution_enabled: false,
-            block_split: BlockSplit::Whole
-        }),
-        Just(TestEnvConfig {
-            executor_mode: ExecutorMode::BothComparison,
-            aggregator_execution_enabled: false,
-            block_split: BlockSplit::SingleTxnPerBlock
-        }),
-        // Sequential execution doesn't have exchanges, so we cannot use BothComparison, nor block split
         arb_block_split(num_txns).prop_map(|block_split| TestEnvConfig {
             executor_mode: ExecutorMode::BothComparison,
-            aggregator_execution_enabled: true,
+            aggregator_execution_mode: AggregatorMode::BothComparison,
             block_split
         }),
-        // Currently, only this fails, so you can comment out all other tests, and run this one for debugging:
-        // Just(TestEnvConfig {
-        //     executor_mode: ExecutorMode::ParallelOnly,
-        //     aggregator_execution_enabled: true,
-        //     block_split: BlockSplit::SingleTxnPerBlock
-        // }),
+    ]
+    .boxed()
+}
+
+#[allow(clippy::arc_with_non_send_sync)] // I think this is noise, don't see an issue, and tests run fine
+fn arb_test_env_non_eqiuvalent(num_txns: usize) -> BoxedStrategy<TestEnvConfig> {
+    prop_oneof![
+        arb_block_split(num_txns).prop_map(|block_split| TestEnvConfig {
+            executor_mode: ExecutorMode::BothComparison,
+            aggregator_execution_mode: AggregatorMode::DisabledOnly,
+            block_split
+        }),
+        arb_block_split(num_txns).prop_map(|block_split| TestEnvConfig {
+            executor_mode: ExecutorMode::BothComparison,
+            aggregator_execution_mode: AggregatorMode::EnabledOnly,
+            block_split
+        }),
     ]
     .boxed()
 }
@@ -239,7 +251,7 @@ proptest! {
     #[test]
     fn test_aggregator_lifetime(test_env in arb_test_env(14), element_type in arb_agg_type(), use_type in arb_use_type()) {
         println!("Testing test_aggregator_lifetime {:?}", test_env);
-        let mut h = setup(test_env.executor_mode, test_env.aggregator_execution_enabled, 14);
+        let mut h = setup(test_env.executor_mode, test_env.aggregator_execution_mode, 14);
 
         let agg_loc = AggregatorLocation::new(*h.account.address(), element_type, use_type, 0);
 
@@ -275,9 +287,9 @@ proptest! {
         is_3_collocated in any::<bool>(),
     ) {
         println!("Testing test_multiple_aggregators_and_collocation {:?}", test_env);
-        let mut h = setup(test_env.executor_mode, test_env.aggregator_execution_enabled, 24);
-        let acc_2 = h.harness.new_account_with_key_pair();
-        let acc_3 = h.harness.new_account_with_key_pair();
+        let mut h = setup(test_env.executor_mode, test_env.aggregator_execution_mode, 24);
+        let acc_2 = h.new_account_with_key_pair();
+        let acc_3 = h.new_account_with_key_pair();
 
         let mut idx_1 = 0;
         let agg_1_loc = AggregatorLocation::new(*h.account.address(), element_type, use_type, 0);
@@ -341,7 +353,7 @@ proptest! {
         let element_type = ElementType::U64;
         let use_type = UseType::UseResourceType;
 
-        let mut h = setup(test_env.executor_mode, test_env.aggregator_execution_enabled, 4);
+        let mut h = setup(test_env.executor_mode, test_env.aggregator_execution_mode, 4);
 
         let agg_loc = AggregatorLocation::new(*h.account.address(), element_type, use_type, 0);
 
@@ -364,7 +376,7 @@ proptest! {
         let element_type = ElementType::U64;
         let use_type = UseType::UseResourceType;
 
-        let mut h = setup(test_env.executor_mode, test_env.aggregator_execution_enabled, 3);
+        let mut h = setup(test_env.executor_mode, test_env.aggregator_execution_mode, 3);
 
         let agg_loc = AggregatorLocation::new(*h.account.address(), element_type, use_type, 0);
 
@@ -387,7 +399,7 @@ proptest! {
         let element_type = ElementType::U64;
         let use_type = UseType::UseResourceType;
 
-        let mut h = setup(test_env.executor_mode, test_env.aggregator_execution_enabled, 3);
+        let mut h = setup(test_env.executor_mode, test_env.aggregator_execution_mode, 3);
 
         let agg_loc = AggregatorLocation::new(*h.account.address(), element_type, use_type, 0);
 
@@ -410,7 +422,7 @@ proptest! {
         let element_type = ElementType::U64;
         let use_type = UseType::UseResourceType;
 
-        let mut h= setup(test_env.executor_mode, test_env.aggregator_execution_enabled, 3);
+        let mut h= setup(test_env.executor_mode, test_env.aggregator_execution_mode, 3);
 
         let agg_loc = AggregatorLocation::new(*h.account.address(), element_type, use_type, 0);
 
@@ -428,12 +440,12 @@ proptest! {
     }
 
     #[test]
-    fn test_aggregator_snapshot(test_env in arb_test_env(9)) {
+    fn test_aggregator_snapshot(test_env in arb_test_env_non_eqiuvalent(9)) {
         println!("Testing test_aggregator_snapshot {:?}", test_env);
         let element_type = ElementType::U64;
         let use_type = UseType::UseResourceType;
 
-        let mut h = setup(test_env.executor_mode, test_env.aggregator_execution_enabled, 9);
+        let mut h = setup(test_env.executor_mode, test_env.aggregator_execution_mode, 9);
 
         let agg_loc = AggregatorLocation::new(*h.account.address(), element_type, use_type, 0);
         let snap_loc = AggregatorLocation::new(*h.account.address(), element_type, use_type, 0);
@@ -457,4 +469,49 @@ proptest! {
             txns,
         );
     }
+}
+
+#[test]
+#[should_panic]
+fn test_aggregator_snapshot_not_equivalent_gas() {
+    let test_env = TestEnvConfig {
+        executor_mode: ExecutorMode::BothComparison,
+        aggregator_execution_mode: AggregatorMode::BothComparison,
+        block_split: BlockSplit::Whole,
+    };
+
+    println!("Testing test_aggregator_snapshot {:?}", test_env);
+    let element_type = ElementType::U64;
+    let use_type = UseType::UseResourceType;
+
+    let mut h = setup(
+        test_env.executor_mode,
+        test_env.aggregator_execution_mode,
+        9,
+    );
+
+    let agg_loc = AggregatorLocation::new(*h.account.address(), element_type, use_type, 0);
+    let snap_loc = AggregatorLocation::new(*h.account.address(), element_type, use_type, 0);
+    let derived_snap_loc =
+        AggregatorLocation::new(*h.account.address(), ElementType::String, use_type, 0);
+
+    let txns = vec![
+        (0, h.init(None, use_type, element_type, true)),
+        (0, h.init(None, use_type, element_type, false)),
+        (0, h.init(None, use_type, ElementType::String, false)),
+        (0, h.new_add(&agg_loc, 400, 100)),
+        (0, h.snapshot(&agg_loc, &snap_loc)),
+        // string needs to be large, for gas rounding to be different
+        (
+            0,
+            h.concat(
+                &snap_loc,
+                &derived_snap_loc,
+                &String::from_utf8(vec![b'A'; 1000]).unwrap(),
+                "13",
+            ),
+        ),
+    ];
+
+    h.run_block_in_parts_and_check(test_env.block_split, txns);
 }
