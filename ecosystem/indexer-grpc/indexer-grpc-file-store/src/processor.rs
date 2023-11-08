@@ -16,6 +16,8 @@ use aptos_moving_average::MovingAverage;
 use std::time::Duration;
 use tracing::info;
 
+const SERVICE_TYPE: &str = "file_worker";
+
 // If the version is ahead of the cache head, retry after a short sleep.
 const AHEAD_OF_CACHE_SLEEP_DURATION_IN_MILLIS: u64 = 100;
 
@@ -150,9 +152,13 @@ impl Processor {
             PROCESSED_VERSIONS_COUNT.inc_by(process_size as u64);
             tps_calculator.tick_now(process_size as u64);
             info!(
+                start_version = current_file_store_version,
+                end_version = current_file_store_version + process_size as u64 - 1_u64,
                 tps = (tps_calculator.avg() * 1000.0) as u64,
                 current_file_store_version = current_file_store_version,
-                "Upload transactions to file store."
+                service_type = SERVICE_TYPE,
+                step = 1,
+                "[File worker] Upload transactions to file store."
             );
             current_file_store_version += process_size as u64;
             LATEST_PROCESSED_VERSION.set(current_file_store_version as i64);
