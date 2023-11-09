@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::metrics::{
-    BYTES_READY_TO_TRANSFER_FROM_SERVER, CONNECTION_COUNT, ERROR_COUNT, LATEST_PROCESSED_VERSION,
-    PROCESSED_BATCH_SIZE, PROCESSED_LATENCY_IN_SECS, PROCESSED_LATENCY_IN_SECS_ALL,
-    PROCESSED_VERSIONS_COUNT, SHORT_CONNECTION_COUNT,
+    BYTES_READY_TO_TRANSFER_FROM_SERVER, CONNECTION_COUNT, ERROR_COUNT,
+    LATEST_PROCESSED_VERSION as LATEST_PROCESSED_VERSION_OLD, PROCESSED_BATCH_SIZE,
+    PROCESSED_LATENCY_IN_SECS, PROCESSED_LATENCY_IN_SECS_ALL, PROCESSED_VERSIONS_COUNT,
+    SHORT_CONNECTION_COUNT,
 };
 use anyhow::Context;
 use aptos_indexer_grpc_utils::{
@@ -14,6 +15,9 @@ use aptos_indexer_grpc_utils::{
     config::IndexerGrpcFileStoreConfig,
     constants::{
         BLOB_STORAGE_SIZE, GRPC_AUTH_TOKEN_HEADER, GRPC_REQUEST_NAME_HEADER, MESSAGE_SIZE_LIMIT,
+    },
+    counters::{
+        DURATION_IN_SECS, LATEST_PROCESSED_VERSION, NUM_TRANSACTIONS_COUNT, TOTAL_SIZE_IN_BYTES,
     },
     file_store_operator::{FileStoreOperator, GcsFileStoreOperator, LocalFileStoreOperator},
     time_diff_since_pb_timestamp_in_secs,
@@ -334,7 +338,7 @@ impl RawData for RawDataServerWrapper {
                                     request_metadata.processor_name.as_str(),
                                 ])
                                 .set(current_batch_size as i64);
-                            LATEST_PROCESSED_VERSION
+                            LATEST_PROCESSED_VERSION_OLD
                                 .with_label_values(&[
                                     request_metadata.request_api_key_name.as_str(),
                                     request_metadata.request_email.as_str(),
@@ -384,7 +388,17 @@ impl RawData for RawDataServerWrapper {
                     tps_calculator.tick_now(current_batch_size as u64);
                     current_version = end_of_batch_version + 1;
                 }
-                info!("[Data Service] Client disconnected.");
+                info!(
+                    request_name = request_metadata.processor_name.as_str(),
+                    request_email = request_metadata.request_email.as_str(),
+                    request_api_key_name = request_metadata.request_api_key_name.as_str(),
+                    processor_name = request_metadata.processor_name.as_str(),
+                    connection_id = request_metadata.request_connection_id.as_str(),
+                    request_user_classification =
+                        request_metadata.request_user_classification.as_str(),
+                    service_type = SERVICE_TYPE,
+                    "[Data Service] Client disconnected."
+                );
                 if let Some(start_time) = connection_start_time {
                     if start_time.elapsed().as_secs() < SHORT_CONNECTION_DURATION_IN_SECS {
                         SHORT_CONNECTION_COUNT
@@ -472,6 +486,34 @@ async fn data_fetch(
                 step = 2.1,
                 "[Data Service] Data fetched from redis cache."
             );
+            LATEST_PROCESSED_VERSION
+                .with_label_values(&[
+                    SERVICE_TYPE,
+                    "2.1",
+                    "[Data Service] Data fetched from redis cache.",
+                ])
+                .set((starting_version + num_of_transactions as u64 - 1) as i64);
+            NUM_TRANSACTIONS_COUNT
+                .with_label_values(&[
+                    SERVICE_TYPE,
+                    "2.1",
+                    "[Data Service] Data fetched from redis cache.",
+                ])
+                .set(transactions.len() as i64);
+            TOTAL_SIZE_IN_BYTES
+                .with_label_values(&[
+                    SERVICE_TYPE,
+                    "2.1",
+                    "[Data Service] Data fetched from redis cache.",
+                ])
+                .set(size_in_bytes as i64);
+            DURATION_IN_SECS
+                .with_label_values(&[
+                    SERVICE_TYPE,
+                    "2.1",
+                    "[Data Service] Data fetched from redis cache.",
+                ])
+                .set(duration_in_secs);
             Ok(TransactionsDataStatus::Success(
                 build_protobuf_encoded_transaction_wrappers(transactions, starting_version),
             ))
@@ -497,10 +539,38 @@ async fn data_fetch(
                         tps = num_of_transactions as f64 / duration_in_secs,
                         bytes_per_sec = size_in_bytes as f64 / duration_in_secs,
                         service_type = SERVICE_TYPE,
-                        connectino_id = request_metadata.request_connection_id.as_str(),
+                        connection_id = request_metadata.request_connection_id.as_str(),
                         step = 2.2,
                         "[Data Service] Data fetched from file store."
                     );
+                    LATEST_PROCESSED_VERSION
+                        .with_label_values(&[
+                            SERVICE_TYPE,
+                            "2.2",
+                            "[Data Service] Data fetched from file store.",
+                        ])
+                        .set((starting_version + num_of_transactions as u64 - 1) as i64);
+                    NUM_TRANSACTIONS_COUNT
+                        .with_label_values(&[
+                            SERVICE_TYPE,
+                            "2.2",
+                            "[Data Service] Data fetched from file store.",
+                        ])
+                        .set(transactions.len() as i64);
+                    TOTAL_SIZE_IN_BYTES
+                        .with_label_values(&[
+                            SERVICE_TYPE,
+                            "2.2",
+                            "[Data Service] Data fetched from file store.",
+                        ])
+                        .set(size_in_bytes as i64);
+                    DURATION_IN_SECS
+                        .with_label_values(&[
+                            SERVICE_TYPE,
+                            "2.2",
+                            "[Data Service] Data fetched from file store.",
+                        ])
+                        .set(duration_in_secs);
                     Ok(TransactionsDataStatus::Success(
                         build_protobuf_encoded_transaction_wrappers(transactions, starting_version),
                     ))
@@ -656,6 +726,34 @@ async fn channel_send_multiple_with_timeout(
             connection_id = request_metadata.request_connection_id.as_str(),
             "[Data Service] One chunk of transactions sent to GRPC response channel.",
         );
+        LATEST_PROCESSED_VERSION
+            .with_label_values(&[
+                SERVICE_TYPE,
+                "3",
+                "[Data Service] One chunk of transactions sent to GRPC response channel.",
+            ])
+            .set(end_version as i64);
+        NUM_TRANSACTIONS_COUNT
+            .with_label_values(&[
+                SERVICE_TYPE,
+                "3",
+                "[Data Service] One chunk of transactions sent to GRPC response channel.",
+            ])
+            .set(num_of_transactions as i64);
+        TOTAL_SIZE_IN_BYTES
+            .with_label_values(&[
+                SERVICE_TYPE,
+                "3",
+                "[Data Service] One chunk of transactions sent to GRPC response channel.",
+            ])
+            .set(response_size as i64);
+        DURATION_IN_SECS
+            .with_label_values(&[
+                SERVICE_TYPE,
+                "3",
+                "[Data Service] One chunk of transactions sent to GRPC response channel.",
+            ])
+            .set(current_batch_start_time.elapsed().as_secs_f64());
     }
     info!(
         start_version = overall_start_version,
@@ -672,6 +770,31 @@ async fn channel_send_multiple_with_timeout(
         step = 4,
         "[Data Service] All chunks of transactions sent to GRPC response channel. Current batch finished.",
     );
+    LATEST_PROCESSED_VERSION
+        .with_label_values(&[
+            SERVICE_TYPE,
+            "4",
+            "[Data Service] All chunks of transactions sent to GRPC response channel. Current batch finished.",
+        ])
+        .set(overall_end_version as i64);
+    NUM_TRANSACTIONS_COUNT
+        .with_label_values(&[
+            SERVICE_TYPE,"4",
+            "[Data Service] All chunks of transactions sent to GRPC response channel. Current batch finished.",
+        ])
+        .set((overall_end_version - overall_start_version + 1) as i64);
+    TOTAL_SIZE_IN_BYTES
+        .with_label_values(&[
+            SERVICE_TYPE,"4",
+            "[Data Service] All chunks of transactions sent to GRPC response channel. Current batch finished.",
+        ])
+        .set(overall_size_in_bytes as i64);
+    DURATION_IN_SECS
+        .with_label_values(&[
+            SERVICE_TYPE,"4",
+            "[Data Service] All chunks of transactions sent to GRPC response channel. Current batch finished.",
+        ])
+        .set(current_batch_start_time.elapsed().as_secs_f64());
 
     Ok(())
 }

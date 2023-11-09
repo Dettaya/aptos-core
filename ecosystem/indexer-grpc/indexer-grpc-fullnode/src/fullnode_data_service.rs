@@ -1,6 +1,9 @@
 // Copyright © Aptos Foundation
 
 use crate::{stream_coordinator::IndexerStreamCoordinator, ServiceContext};
+use aptos_indexer_grpc_utils::counters::{
+    DURATION_IN_SECS, LATEST_PROCESSED_VERSION, NUM_TRANSACTIONS_COUNT,
+};
 use aptos_logger::{error, info};
 use aptos_moving_average::MovingAverage;
 use aptos_protos::internal::fullnode::v1::{
@@ -71,7 +74,8 @@ impl FullnodeData for FullnodeDataService {
                 tx.clone(),
             );
             // Sends init message (one time per request) to the client in the with chain id and starting version. Basically a handshake
-            let init_status = get_status(StatusType::Init, starting_version, None, ledger_chain_id);
+            let init_status: TransactionsFromNodeResponse =
+                get_status(StatusType::Init, starting_version, None, ledger_chain_id);
             match tx.send(Result::<_, Status>::Ok(init_status)).await {
                 Ok(_) => {
                     // TODO: Add request details later
@@ -88,8 +92,11 @@ impl FullnodeData for FullnodeDataService {
             }
             let mut base: u64 = 0;
             loop {
+                let mut start_time = std::time::Instant::now();
                 // Processes and sends batch of transactions to client
                 let results = coordinator.process_next_batch().await;
+
+                let highest_known_version = coordinator.highest_known_version;
                 let max_version = match IndexerStreamCoordinator::get_max_batch_version(results) {
                     Ok(max_version) => max_version,
                     Err(e) => {
@@ -100,7 +107,41 @@ impl FullnodeData for FullnodeDataService {
                         break;
                     },
                 };
-                let highest_known_version = coordinator.highest_known_version;
+
+                info!(
+                    start_version = coordinator.current_version,
+                    end_version = max_version,
+                    num_of_transactions = ma.sum(),
+                    highest_known_version = highest_known_version,
+                    service_type = SERVICE_TYPE,
+                    step = 1,
+                    "[Indexer Fullnode] Processed batch of transactions from fullnode"
+                );
+
+                LATEST_PROCESSED_VERSION
+                    .with_label_values(&[
+                        SERVICE_TYPE,
+                        "1",
+                        "[Indexer Fullnode] Processed batch of transactions from fullnode",
+                    ])
+                    .set(highest_known_version as i64);
+                NUM_TRANSACTIONS_COUNT
+                    .with_label_values(&[
+                        SERVICE_TYPE,
+                        "1",
+                        "[Indexer Fullnode] Processed batch of transactions from fullnode",
+                    ])
+                    .set(ma.sum() as i64);
+                DURATION_IN_SECS
+                    .with_label_values(&[
+                        SERVICE_TYPE,
+                        "1",
+                        "[Indexer Fullnode] Processed batch of transactions from fullnode",
+                    ])
+                    .set(start_time.elapsed().as_secs_f64());
+
+                start_time = std::time::Instant::now();
+
                 // send end batch message (each batch) upon success of the entire batch
                 // client can use the start and end version to ensure that there are no gaps
                 // end loop if this message fails to send because otherwise the client can't validate
@@ -125,8 +166,31 @@ impl FullnodeData for FullnodeDataService {
                                 highest_known_version = highest_known_version,
                                 tps = (ma.avg() * 1000.0) as u64,
                                 service_type = SERVICE_TYPE,
+                                step = 2,
                                 "[Indexer Fullnode] Sent batch successfully"
                             );
+
+                            LATEST_PROCESSED_VERSION
+                                .with_label_values(&[
+                                    SERVICE_TYPE,
+                                    "2",
+                                    "[Indexer Fullnode] Sent batch successfully",
+                                ])
+                                .set(highest_known_version as i64);
+                            NUM_TRANSACTIONS_COUNT
+                                .with_label_values(&[
+                                    SERVICE_TYPE,
+                                    "2",
+                                    "[Indexer Fullnode] Sent batch successfully",
+                                ])
+                                .set(ma.sum() as i64);
+                            DURATION_IN_SECS
+                                .with_label_values(&[
+                                    SERVICE_TYPE,
+                                    "2",
+                                    "[Indexer Fullnode] Sent batch successfully",
+                                ])
+                                .set(start_time.elapsed().as_secs_f64());
                         }
                     },
                     Err(_) => {

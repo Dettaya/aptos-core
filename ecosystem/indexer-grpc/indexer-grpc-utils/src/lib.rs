@@ -4,6 +4,7 @@
 pub mod cache_operator;
 pub mod config;
 pub mod constants;
+pub mod counters;
 pub mod file_store_operator;
 pub mod types;
 

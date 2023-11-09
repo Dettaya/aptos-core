@@ -1,13 +1,16 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::metrics::{LATEST_PROCESSED_VERSION, PROCESSED_VERSIONS_COUNT};
+use crate::metrics::{
+    LATEST_PROCESSED_VERSION as LATEST_PROCESSED_VERSION_OLD, PROCESSED_VERSIONS_COUNT,
+};
 use anyhow::{bail, Context, Result};
 use aptos_indexer_grpc_utils::{
     build_protobuf_encoded_transaction_wrappers,
     cache_operator::{CacheBatchGetStatus, CacheOperator},
     config::IndexerGrpcFileStoreConfig,
     constants::BLOB_STORAGE_SIZE,
+    counters::{DURATION_IN_SECS, LATEST_PROCESSED_VERSION, NUM_TRANSACTIONS_COUNT},
     file_store_operator::{FileStoreOperator, GcsFileStoreOperator, LocalFileStoreOperator},
     types::RedisUrl,
     EncodedTransactionWithVersion,
@@ -107,6 +110,7 @@ impl Processor {
                 bail!("File store version is not a multiple of BLOB_STORAGE_SIZE.");
             }
 
+            let file_store_upload_batch_start = std::time::Instant::now();
             let batch_get_result = self
                 .cache_operator
                 .batch_get_encoded_proto_data(current_cache_version)
@@ -151,17 +155,43 @@ impl Processor {
                 .context("Uploading transactions to file store failed.")?;
             PROCESSED_VERSIONS_COUNT.inc_by(process_size as u64);
             tps_calculator.tick_now(process_size as u64);
+            let end_version = current_file_store_version + process_size as u64 - 1_u64;
+            let num_transactions = end_version - current_file_store_version + 1;
             info!(
                 start_version = current_file_store_version,
-                end_version = current_file_store_version + process_size as u64 - 1_u64,
+                end_version = end_version,
+                num_of_transactions = num_transactions,
+                duration_in_secs = file_store_upload_batch_start.elapsed().as_secs_f64(),
                 tps = (tps_calculator.avg() * 1000.0) as u64,
                 current_file_store_version = current_file_store_version,
                 service_type = SERVICE_TYPE,
                 step = 1,
                 "[File worker] Upload transactions to file store."
             );
+            LATEST_PROCESSED_VERSION
+                .with_label_values(&[
+                    SERVICE_TYPE,
+                    "1",
+                    "[File worker] Upload transactions to file store.",
+                ])
+                .set(end_version as i64);
+            NUM_TRANSACTIONS_COUNT
+                .with_label_values(&[
+                    SERVICE_TYPE,
+                    "1",
+                    "[File worker] Upload transactions to file store.",
+                ])
+                .set(num_transactions as i64);
+            DURATION_IN_SECS
+                .with_label_values(&[
+                    SERVICE_TYPE,
+                    "1",
+                    "[File worker] Upload transactions to file store.",
+                ])
+                .set(file_store_upload_batch_start.elapsed().as_secs_f64());
+
             current_file_store_version += process_size as u64;
-            LATEST_PROCESSED_VERSION.set(current_file_store_version as i64);
+            LATEST_PROCESSED_VERSION_OLD.set(current_file_store_version as i64);
         }
     }
 }

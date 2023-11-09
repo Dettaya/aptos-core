@@ -2,13 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::metrics::{
-    ERROR_COUNT, LATEST_PROCESSED_VERSION, PROCESSED_BATCH_SIZE, PROCESSED_LATENCY_IN_SECS,
-    PROCESSED_VERSIONS_COUNT,
+    ERROR_COUNT, LATEST_PROCESSED_VERSION as LATEST_PROCESSED_VERSION_OLD, PROCESSED_BATCH_SIZE,
+    PROCESSED_LATENCY_IN_SECS, PROCESSED_VERSIONS_COUNT,
 };
 use anyhow::{bail, Context, Result};
 use aptos_indexer_grpc_utils::{
     cache_operator::CacheOperator,
     config::IndexerGrpcFileStoreConfig,
+    counters::{
+        DURATION_IN_SECS, LATEST_PROCESSED_VERSION, NUM_TRANSACTIONS_COUNT, TOTAL_SIZE_IN_BYTES,
+    },
     create_grpc_client,
     file_store_operator::{
         FileStoreMetadata, FileStoreOperator, GcsFileStoreOperator, LocalFileStoreOperator,
@@ -315,7 +318,7 @@ async fn process_streaming_response(
                     tps_calculator.tick_now(num_of_transactions);
                     total_size_in_bytes += size_in_bytes;
                     PROCESSED_VERSIONS_COUNT.inc_by(num_of_transactions);
-                    LATEST_PROCESSED_VERSION.set(current_version as i64);
+                    LATEST_PROCESSED_VERSION_OLD.set(current_version as i64);
                     PROCESSED_BATCH_SIZE.set(num_of_transactions as i64);
                     format!("bypass compiler {}", total_size_in_bytes);
                 },
@@ -361,6 +364,34 @@ async fn process_streaming_response(
                         step = 1,
                         "[Indexer Cache] Successfully process current batch."
                     );
+                    LATEST_PROCESSED_VERSION
+                        .with_label_values(&[
+                            SERVICE_TYPE,
+                            "1",
+                            "[Indexer Cache] Successfully process current batch.",
+                        ])
+                        .set((start_version + num_of_transactions - 1) as i64);
+                    NUM_TRANSACTIONS_COUNT
+                        .with_label_values(&[
+                            SERVICE_TYPE,
+                            "1",
+                            "[Indexer Cache] Successfully process current batch.",
+                        ])
+                        .set(num_of_transactions as i64);
+                    TOTAL_SIZE_IN_BYTES
+                        .with_label_values(&[
+                            SERVICE_TYPE,
+                            "1",
+                            "[Indexer Cache] Successfully process current batch.",
+                        ])
+                        .set(total_size_in_bytes as i64);
+                    DURATION_IN_SECS
+                        .with_label_values(&[
+                            SERVICE_TYPE,
+                            "1",
+                            "[Indexer Cache] Successfully process current batch.",
+                        ])
+                        .set(starting_time.elapsed().as_secs() as f64);
                     total_size_in_bytes = 0;
                     starting_time = std::time::Instant::now();
                     format!("bypass compiler {}", total_size_in_bytes);
