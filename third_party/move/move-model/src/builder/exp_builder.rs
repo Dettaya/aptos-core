@@ -2672,7 +2672,9 @@ impl<'env, 'translator, 'module_translator> ExpTranslator<'env, 'translator, 'mo
                     // error if it is not pure.
                     if let Some(entry) = self.parent.parent.fun_table.get(&qsym) {
                         if !entry.is_pure {
-                            if self.mode == ExpTranslationMode::TryImplAsSpec {
+                            if self.mode == ExpTranslationMode::TryImplAsSpec
+                                || self.mode == ExpTranslationMode::Spec
+                            {
                                 // The Move function is calling another impure Move function,
                                 // so it should be considered impure.
                                 if module_id.to_usize() < self.parent.module_id.to_usize() {

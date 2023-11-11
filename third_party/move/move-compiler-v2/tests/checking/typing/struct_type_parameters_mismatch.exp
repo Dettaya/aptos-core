@@ -1,0 +1,14 @@
+// ---- Model Dump
+module 0x42::struct_type_parameters_mismatch {
+    struct A {
+        root: address,
+    }
+    private fun foo<Feature>(addr: address): address
+        acquires struct_type_parameters_mismatch::A(*)
+     {
+        select struct_type_parameters_mismatch::A.root(BorrowGlobal(Immutable)<struct_type_parameters_mismatch::A<Feature>>(addr))
+    }
+    spec fun $foo<Feature>(addr: address): address {
+        select struct_type_parameters_mismatch::A.root(global<struct_type_parameters_mismatch::A<#0>>(addr))
+    }
+} // end 0x42::struct_type_parameters_mismatch

@@ -1,0 +1,13 @@
+
+Diagnostics:
+error: expected `num` but found `range`
+  ┌─ tests/checking/specs/type_confusion.move:6:32
+  │
+6 │             assert forall j in 0..i: j < i;
+  │                                ^^^^
+
+error: quantified variables must range over a vector, a type domain, or a number range
+  ┌─ tests/checking/specs/type_confusion.move:6:27
+  │
+6 │             assert forall j in 0..i: j < i;
+  │                           ^

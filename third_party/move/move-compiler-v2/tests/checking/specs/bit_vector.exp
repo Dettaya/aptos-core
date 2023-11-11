@@ -1,0 +1,7 @@
+
+Diagnostics:
+error: type unification cycle check failed (`?1 =?= vector<?1>`, try to annotate type)
+  ┌─ tests/checking/specs/bit_vector.move:7:24
+  │
+7 │             assert len(bit_field) == 0;
+  │                        ^^^^^^^^^

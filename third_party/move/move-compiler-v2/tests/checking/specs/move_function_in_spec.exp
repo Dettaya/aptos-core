@@ -1,0 +1,30 @@
+// ---- Model Dump
+module 0x42::move_function_in_spec {
+    struct TypeInfo {
+        account_address: address,
+    }
+    private fun foo<T>() {
+        {
+          let type_info: move_function_in_spec::TypeInfo = move_function_in_spec::type_of<T>();
+          {
+            let account_address: address = select move_function_in_spec::TypeInfo.account_address(type_info);
+            spec {
+              assert Eq<address>(account_address, select move_function_in_spec::TypeInfo.account_address(move_function_in_spec::$type_of<#0>()));
+            }
+            ;
+            Tuple()
+          }
+        }
+    }
+    public native fun type_of<T>(): move_function_in_spec::TypeInfo;
+    spec fun $foo<T>() {
+        {
+          let type_info: move_function_in_spec::TypeInfo = move_function_in_spec::$type_of<#0>();
+          {
+            let account_address: address = select move_function_in_spec::TypeInfo.account_address(type_info);
+            Tuple()
+          }
+        }
+    }
+    spec fun $type_of<T>(): move_function_in_spec::TypeInfo;
+} // end 0x42::move_function_in_spec

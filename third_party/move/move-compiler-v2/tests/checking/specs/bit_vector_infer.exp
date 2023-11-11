@@ -1,0 +1,13 @@
+
+Diagnostics:
+error: unable to infer type: `vector<?2>`
+   ┌─ tests/checking/specs/bit_vector_infer.move:12:24
+   │
+12 │             assert len(bit_field) == 0;
+   │                        ^^^^^^^^^
+
+error: invalid type instantiation `()`: only structs, vectors, and primitive types allowed
+   ┌─ tests/checking/specs/bit_vector_infer.move:12:24
+   │
+12 │             assert len(bit_field) == 0;
+   │                        ^^^^^^^^^
