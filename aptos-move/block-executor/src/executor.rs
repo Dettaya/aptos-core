@@ -23,7 +23,7 @@ use aptos_aggregator::{
 };
 use aptos_logger::{debug, error, info};
 use aptos_mvhashmap::{
-    types::{Incarnation, MVDelayedFieldsError, TxnIndex, ValueWithLayout, MVDataOutput},
+    types::{Incarnation, MVDataOutput, MVDelayedFieldsError, TxnIndex, ValueWithLayout},
     unsync_map::UnsyncMap,
     versioned_delayed_fields::CommitError,
     MVHashMap,
@@ -863,7 +863,9 @@ where
             last_input_output.reads_needing_delayed_field_exchange(txn_idx)
         {
             for (key, layout) in reads_needing_delayed_field_exchange.into_iter() {
-                if let Ok(MVDataOutput::Versioned(_, ValueWithLayout::Exchanged(value, _))) = versioned_cache.data().fetch_data(&key, txn_idx) {
+                if let Ok(MVDataOutput::Versioned(_, ValueWithLayout::Exchanged(value, _))) =
+                    versioned_cache.data().fetch_data(&key, txn_idx)
+                {
                     patched_resource_write_set.insert(
                         key,
                         Self::replace_ids_with_values(&value, layout.as_ref(), &latest_view),
@@ -889,7 +891,10 @@ where
         last_input_output.record_materialized_txn_output(
             txn_idx,
             aggregator_v1_delta_writes,
-            patched_resource_write_set.into_iter().chain(serialized_groups).collect(),
+            patched_resource_write_set
+                .into_iter()
+                .chain(serialized_groups)
+                .collect(),
             patched_events,
         );
         if let Some(txn_commit_listener) = &self.transaction_commit_hook {
@@ -1300,7 +1305,9 @@ where
                         for (key, layout) in
                             output.reads_needing_delayed_field_exchange().into_iter()
                         {
-                            if let Some(ValueWithLayout::Exchanged(value, _)) = unsync_map.fetch_data(&key) {
+                            if let Some(ValueWithLayout::Exchanged(value, _)) =
+                                unsync_map.fetch_data(&key)
+                            {
                                 if patched_resource_write_set
                                     .insert(
                                         key,
@@ -1337,7 +1344,10 @@ where
                             // They are already handled because we passed materialize_deltas=true
                             // to execute_transaction.
                             vec![],
-                            patched_resource_write_set.into_iter().chain(serialized_groups.into_iter()).collect(),
+                            patched_resource_write_set
+                                .into_iter()
+                                .chain(serialized_groups.into_iter())
+                                .collect(),
                             patched_events,
                         );
                     } else {
