@@ -114,6 +114,7 @@ impl FullnodeData for FullnodeDataService {
                     num_of_transactions = ma.sum(),
                     highest_known_version = highest_known_version,
                     service_type = SERVICE_TYPE,
+                    duration_in_secs = start_time.elapsed().as_secs_f64(),
                     step = 1,
                     "[Indexer Fullnode] Processed batch of transactions from fullnode"
                 );
